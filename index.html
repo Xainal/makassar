@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Update Harga Sayur Grosir Harian</title>
+  <style>
+    :root{
+      --bg:#f5f5f7; --card:#fff; --text:#111; --muted:#666; --line:#ddd;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui;background:var(--bg);color:var(--text)}
+    .container{max-width:1100px;margin:auto;padding:18px}
+    h1{margin:0 0 8px;font-size:clamp(20px,4.2vw,28px)}
+    .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+    .section{background:var(--card);border-radius:14px;padding:14px;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+    label{font-size:13px}
+    input,select{
+      width:100%; padding:10px; border:1px solid #ccc; border-radius:10px; outline:none; background:#fff;
+    }
+    input:focus{box-shadow:0 0 0 3px rgba(0,0,0,.08);border-color:#999}
+    button{
+      padding:10px 12px; border-radius:10px; border:0; cursor:pointer; font-weight:800;
+    }
+    .btn{background:#111;color:#fff}
+    .btn-light{background:#eee}
+    .flex{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+    .field{flex:1;min-width:180px}
+    .field.small{width:180px;flex:0 0 auto}
+    @media(max-width:640px){
+      .field,.field.small{min-width:0;width:100%;flex:1 1 100%}
+      button{width:100%}
+    }
+
+    .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:520px}
+    th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+    th{background:#fafafa;position:sticky;top:0;z-index:1}
+    .num{text-align:right;font-variant-numeric:tabular-nums}
+    .note{color:var(--muted);font-size:13px;margin-top:10px}
+
+    /* Modal */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:14px}
+    .modal{background:#fff;border-radius:14px;padding:16px;max-width:520px;width:100%;max-height:88vh;overflow:auto}
+    .modal h3{margin:0 0 8px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:640px){.grid{grid-template-columns:1fr}}
+    .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    @media(max-width:640px){.actions{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Update Harga Sayur Grosir Harian</h1>
+    <div class="sub">
+      Satuan: <b>Per Kantong</b> • Data tersimpan di perangkat (localStorage)
+      <span id="lastUpdate"></span>
+    </div>
+
+    <div class="section">
+      <div class="flex">
+        <div class="field small">
+          <label>Tanggal</label>
+          <input type="date" id="date" />
+        </div>
+
+        <div class="field">
+          <label>Cari</label>
+          <input id="search" placeholder="ketik nama komoditas..." />
+        </div>
+
+        <div class="field small">
+          <button class="btn-light" onclick="exportCSV()">Export CSV</button>
+        </div>
+
+        <div class="field small">
+          <button class="btn" onclick="openUpdate()">Update Harga</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:70px">No</th>
+              <th>Komoditas</th>
+              <th class="num" style="width:220px">Harga (Rp/kantong)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        * Harga di bawah adalah harga grosir per kantong dan dapat berubah sewaktu-waktu.
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL UPDATE -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <h3>Update Harga Grosir</h3>
+      <div class="grid">
+        <div>
+          <label>Komoditas</label>
+          <select id="mCommodity"></select>
+        </div>
+        <div>
+          <label>Harga (Rp/kantong)</label>
+          <input id="mPrice" type="number" min="0" inputmode="numeric" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-light" onclick="closeModal()">Batal</button>
+        <button class="btn" onclick="savePrice()">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ====== CONFIG: list komoditas ====== */
+const COMMODITIES = [
+  "Tomat",
+  "Cabe Keriting Merah",
+  "Cabe Keriting Hijau",
+  "Daun Bawang",
+  "Sawi Putih",
+  "Wortel Super",
+  "Wortel Cakar",
+  "Buncis"
+];
+
+const KEY = "HARGA_SAYUR_V1";
+
+let state = JSON.parse(localStorage.getItem(KEY) || "null") || {
+  date: new Date().toISOString().slice(0,10),
+  lastUpdate: null,
+  prices: {} // name -> number
+};
+
+function saveState(){
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+function fmtRp(n){
+  return "Rp " + Number(n||0).toLocaleString("id-ID");
+}
+
+function seedIfEmpty(){
+  // kalau belum ada harga sama sekali, seed dengan 0
+  for(const name of COMMODITIES){
+    if(state.prices[name] === undefined) state.prices[name] = 0;
+  }
+  if(!state.date) state.date = new Date().toISOString().slice(0,10);
+  saveState();
+}
+
+/* ====== UI render ====== */
+function render(){
+  const q = (search.value || "").toLowerCase();
+  const rows = COMMODITIES
+    .filter(n => n.toLowerCase().includes(q))
+    .map((name, idx) => {
+      const price = state.prices[name] ?? 0;
+      return `
+        <tr>
+          <td>${idx+1}</td>
+          <td>${escapeHtml(name)}</td>
+          <td class="num">${fmtRp(price)}</td>
+        </tr>
+      `;
+    }).join("");
+
+  tbody.innerHTML = rows || `
+    <tr>
+      <td colspan="3" style="color:#666">Tidak ada hasil.</td>
+    </tr>
+  `;
+
+  date.value = state.date || new Date().toISOString().slice(0,10);
+  lastUpdate.textContent = state.lastUpdate ? ` • Last update: ${state.lastUpdate}` : " • Last update: -";
+}
+
+function escapeHtml(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+/* ====== Modal update ====== */
+function openUpdate(){
+  // isi dropdown komoditas
+  mCommodity.innerHTML = COMMODITIES.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  mCommodity.value = COMMODITIES[0];
+
+  // set default harga sesuai komoditas terpilih
+  mPrice.value = state.prices[mCommodity.value] ?? 0;
+
+  modalBg.style.display = "flex";
+  setTimeout(()=>mPrice.focus(), 50);
+}
+
+function closeModal(){
+  modalBg.style.display = "none";
+}
+
+mCommodity?.addEventListener("change", ()=>{
+  mPrice.value = state.prices[mCommodity.value] ?? 0;
+});
+
+function savePrice(){
+  const name = mCommodity.value;
+  const price = Number(mPrice.value || 0);
+  if(price < 0){ alert("Harga tidak boleh minus."); return; }
+
+  state.prices[name] = price;
+  state.lastUpdate = new Date().toISOString().slice(0,19).replace("T"," ");
+  saveState();
+
+  closeModal();
+  render();
+}
+
+/* ====== Export CSV ====== */
+function exportCSV(){
+  const lines = [];
+  lines.push("date,no,commodity,price_per_kantong");
+  const dt = state.date || new Date().toISOString().slice(0,10);
+
+  COMMODITIES.forEach((name, i)=>{
+    const price = state.prices[name] ?? 0;
+    lines.push(`${dt},${i+1},"${name.replaceAll('"','""')}",${price}`);
+  });
+
+  const csv = lines.join("\n");
+  const a = document.createElement("a");
+  a.href = "data:text/csv;charset=utf-8," + encodeURI(csv);
+  a.download = `harga-sayur-${dt}.csv`;
+  a.click();
+}
+
+/* ====== Events ====== */
+search.addEventListener("input", render);
+date.addEventListener("change", ()=>{
+  state.date = date.value;
+  saveState();
+  render();
+});
+
+// close modal on outside click
+modalBg.addEventListener("click", (e)=>{
+  if(e.target === modalBg) closeModal();
+});
+
+seedIfEmpty();
+render();
+</script>
+</body>
+</html>
