@@ -48,9 +48,7 @@ h1{
   margin-bottom:14px;
 }
 
-label{
-  font-size:13px;
-}
+label{font-size:13px}
 
 input,select{
   width:100%;
@@ -58,24 +56,19 @@ input,select{
   border-radius:10px;
   border:1px solid #ccc;
   outline:none;
+  background:#fff;
 }
 
 button{
   padding:10px 12px;
   border-radius:10px;
   border:none;
-  font-weight:700;
+  font-weight:800;
   cursor:pointer;
 }
 
-.btn{
-  background:var(--accent);
-  color:#fff;
-}
-
-.btn-light{
-  background:#eee;
-}
+.btn{background:var(--accent);color:#fff}
+.btn-light{background:#eee}
 
 .flex{
   display:flex;
@@ -94,34 +87,14 @@ button{
 }
 
 /* ===== DESKTOP TABLE ===== */
-.table-wrap{
-  overflow:auto;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th,td{
-  padding:12px;
-  border-bottom:1px solid var(--line);
-  text-align:left;
-}
-
-th{
-  background:#fafafa;
-}
-
-.num{
-  text-align:right;
-  font-variant-numeric:tabular-nums;
-}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left}
+th{background:#fafafa}
+.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* ===== MOBILE CARD LIST ===== */
-.mobile-list{
-  display:none;
-}
+.mobile-list{display:none}
 
 .card{
   background:#fff;
@@ -131,20 +104,35 @@ th{
   box-shadow:0 1px 6px rgba(0,0,0,.08);
 }
 
+.card-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+
 .card .no{
-  font-size:13px;
+  font-size:12px;
   color:var(--muted);
+  margin-bottom:6px;
 }
 
 .card .name{
   font-size:16px;
-  font-weight:700;
-  margin:4px 0 6px;
+  font-weight:800;
 }
 
 .card .price{
-  font-size:15px;
-  font-weight:700;
+  font-size:16px;
+  font-weight:900;
+  text-align:right;
+  white-space:nowrap;
+}
+
+.card .unit{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:6px;
 }
 
 /* switch view */
@@ -215,7 +203,7 @@ th{
     <select id="mCommodity"></select>
 
     <label style="margin-top:10px">Harga (Rp / kantong)</label>
-    <input id="mPrice" type="number" min="0">
+    <input id="mPrice" type="number" min="0" inputmode="numeric">
 
     <div class="flex" style="margin-top:14px">
       <button class="btn-light" onclick="closeModal()">Batal</button>
@@ -246,49 +234,66 @@ function seed(){
   COMMODITIES.forEach(n=>{
     if(state.prices[n]===undefined) state.prices[n]=0;
   });
+  if(!state.date) state.date=new Date().toISOString().slice(0,10);
   save();
 }
 
 function render(){
   const q=(search.value||"").toLowerCase();
-  let rows="",cards="";
+  let rows="", cards="";
 
-  COMMODITIES.filter(n=>n.toLowerCase().includes(q))
-  .forEach((name,i)=>{
+  const filtered = COMMODITIES.filter(n=>n.toLowerCase().includes(q));
+
+  filtered.forEach((name, i)=>{
     const price=state.prices[name]||0;
 
-    rows+=`
+    rows += `
       <tr>
         <td>${i+1}</td>
         <td>${name}</td>
-        <td class="num">${rp(price)}</td>
-      </tr>`;
+        <td class="num"><b>${rp(price)}</b></td>
+      </tr>
+    `;
 
-    cards+=`
+    cards += `
       <div class="card">
         <div class="no">${i+1}</div>
-        <div class="name">${name}</div>
-        <div class="price">${rp(price)} / kantong</div>
-      </div>`;
+
+        <div class="card-row">
+          <div class="name">${name}</div>
+          <div class="price">${rp(price)}</div>
+        </div>
+
+        <div class="unit">per kantong</div>
+      </div>
+    `;
   });
 
-  tbody.innerHTML=rows;
-  mobileList.innerHTML=cards;
-  date.value=state.date;
-  lastUpdate.textContent=state.lastUpdate?" • Update: "+state.lastUpdate:"";
+  tbody.innerHTML = rows || `<tr><td colspan="3" style="color:#666">Tidak ada hasil.</td></tr>`;
+  mobileList.innerHTML = cards || `<div class="section" style="color:#666">Tidak ada hasil.</div>`;
+
+  date.value = state.date;
+  lastUpdate.textContent = state.lastUpdate ? " • Update: " + state.lastUpdate : "";
 }
 
 function openUpdate(){
-  mCommodity.innerHTML=COMMODITIES.map(n=>`<option>${n}</option>`).join("");
-  mCommodity.value=COMMODITIES[0];
-  mPrice.value=state.prices[mCommodity.value]||0;
+  mCommodity.innerHTML = COMMODITIES.map(n=>`<option>${n}</option>`).join("");
+  mCommodity.value = COMMODITIES[0];
+  mPrice.value = state.prices[mCommodity.value]||0;
   modalBg.style.display="flex";
+  setTimeout(()=>mPrice.focus(), 60);
 }
 
 function closeModal(){modalBg.style.display="none"}
 
+mCommodity.addEventListener("change", ()=>{
+  mPrice.value = state.prices[mCommodity.value]||0;
+});
+
 function savePrice(){
-  state.prices[mCommodity.value]=Number(mPrice.value||0);
+  const price = Number(mPrice.value||0);
+  if(price < 0){ alert("Harga tidak boleh minus."); return; }
+  state.prices[mCommodity.value]=price;
   state.lastUpdate=new Date().toLocaleString("id-ID");
   save();
   closeModal();
@@ -298,16 +303,24 @@ function savePrice(){
 function exportCSV(){
   let csv="no,komoditas,harga_per_kantong\n";
   COMMODITIES.forEach((n,i)=>{
-    csv+=`${i+1},"${n}",${state.prices[n]||0}\n`;
+    csv+=`${i+1},"${n.replaceAll('"','""')}",${state.prices[n]||0}\n`;
   });
   const a=document.createElement("a");
   a.href="data:text/csv;charset=utf-8,"+encodeURI(csv);
-  a.download="harga-sayur.csv";
+  a.download=`harga-sayur-${state.date||"hari-ini"}.csv`;
   a.click();
 }
 
 search.addEventListener("input",render);
-date.addEventListener("change",()=>{state.date=date.value;save()});
+date.addEventListener("change",()=>{
+  state.date = date.value;
+  save();
+  render();
+});
+
+modalBg.addEventListener("click",(e)=>{
+  if(e.target===modalBg) closeModal();
+});
 
 seed();
 render();
